@@ -77,3 +77,8 @@ This is an (incomplete) list of the registers and their apparent purpose:
 | `E2`     | 15     | ?                       |                                     |
 | `FE`     | 1      | ?                       |                                     |
 </details>
+
+## Todo
+- [ ] Get physical access to the device to see what changing settings (in the app) does to the registers
+- [ ] Find out how to change settings
+- [ ] Implement as proper esphome component
