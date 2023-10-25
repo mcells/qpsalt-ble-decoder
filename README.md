@@ -2,7 +2,7 @@
 Some information about the ble protocol of the QP Salt Bright Duo/Pro salt chlorinator. Also implementation in esphome.
 
 ## Motivation
-The Salt Bright Duo can be configured locally over BLE via a smartphone app called ePool connect, which also displays some sensor readings like pH, ORP, salt concentration or water temperature. 
+The Salt Bright Duo can be configured locally over BLE via a smartphone app called ePool, which also displays some sensor readings like pH, ORP, salt concentration or water temperature. 
 Unfortunately, there is no way to read these measurements from a web interface or even cloud service for use in eg. home automation or for logging. The suggested "connectivity addon" turns out to not connect via Bluetooth to the unit, but instead uses its own temperature sensor and can only switch the power to the unit via a relay.
 
 ## The communication
