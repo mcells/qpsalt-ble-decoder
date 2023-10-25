@@ -1,0 +1,207 @@
+substitutions:
+  esp_name: BlePool
+  esp_hostname: blepool
+  salt_gen_mac: FF:FF:FF:FF:FF:FF # MAC address of the Salt chlorinator
+
+esphome:
+  name: ${esp_hostname}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  password: ""
+
+ota:
+  password: ""
+
+button:
+  - platform: restart
+    name: "${esp_name} Restart"
+switch:
+  - platform: safe_mode
+    name: "${esp_name} Restart (Safe Mode)"
+
+wifi:
+  ssid: "ssidtoconnect"
+  password: "thepasswordforthessid"
+  ap:
+    ssid: "${esp_name} Fallback Hotspot"
+    password: "insertsomething"
+
+captive_portal:
+
+web_server:
+  port: 80
+  include_internal: true 
+
+esp32_ble_tracker:
+  on_ble_advertise:
+      - mac_address: ${salt_gen_mac}
+        then:
+          - lambda: |-
+              ESP_LOGD("ble_adv", "New BLE device");
+              ESP_LOGD("ble_adv", "  address: %s", x.address_str().c_str());
+              ESP_LOGD("ble_adv", "  name: %s", x.get_name().c_str());
+
+ble_client:
+  - mac_address: ${salt_gen_mac}
+    id: saltgen
+    
+sensor:
+  - platform: ble_client
+    type: characteristic
+    ble_client_id: saltgen
+    id: datasensor
+    name: "Data"
+    service_uuid: '1081'
+    characteristic_uuid: 'ef785c24-22bb-463d-b651-0b7445ba091c'
+    notify: true
+    update_interval: 30s
+    lambda: |-
+            std::string hexString;
+            for (const auto& value : x) {
+                char buffer[5];
+                snprintf(buffer, sizeof(buffer), "%02X ", value);
+                hexString += buffer;
+            }
+            ESP_LOGV("ble_sensor_lambda", "received data: 0x%s", hexString.c_str());
+            uint8_t startbyte = x[0];       // 0x00
+            uint8_t wholepackage_len = x[1];
+            uint8_t datatypelen = x[2];     // 0x01
+
+            int i = 3;
+            while (i < wholepackage_len - 2) {
+              uint8_t dataRegister = x[i];
+              i++;
+              uint8_t datalen = x[i];
+              i++;
+
+              ESP_LOGV("ble_sensor_lambda", "register: 0x%0x: datalen: %i", dataRegister, datalen);
+
+              // Copy the data payload
+              uint8_t dataArray[datalen];
+              for (int j = 0; j < datalen; j++){
+                dataArray[j] = x[i+j];
+              }
+
+              if(dataRegister == 0x06){ //orp
+                //ESP_LOGV("ble_sensor_lambda", "orp data: 0x%x %x", dataArray[0], dataArray[1]);
+                uint16_t orpVal = (dataArray[0] & 0xff) << 8;
+                orpVal += (dataArray[1] & 0xff);
+                id(orp).publish_state(0.001 * float(orpVal));
+
+              } else if(dataRegister == 0x35){ // orp setpoint
+                //ESP_LOGV("ble_sensor_lambda", "orp setpoint data: 0x%x", dataArray[0]);
+                uint8_t orpset = (dataArray[0] & 0xff);
+                id(orp_set).publish_state(0.01 * float(orpset));
+
+              } else if(dataRegister == 0x01){ // pH
+                //ESP_LOGV("ble_sensor_lambda", "pH data: 0x%x", dataArray[0]);
+                uint8_t pHVal = (dataArray[0] & 0xff);
+                id(ph).publish_state(0.1 * float(pHVal));
+
+              } else if(dataRegister == 0x30){ // pH setpoint
+                //ESP_LOGV("ble_sensor_lambda", "pH setpoint data: 0x%x", dataArray[0]);
+                uint8_t phset = (dataArray[0] & 0xff);
+                id(ph_set).publish_state(0.1 * float(phset));
+
+              } else if(dataRegister == 0x09){ // temperatur
+                //ESP_LOGV("ble_sensor_lambda", "temperature data: 0x%x %x", dataArray[0], dataArray[1]);
+                uint16_t tempVal = (dataArray[0] & 0xff) << 8;
+                tempVal += (dataArray[1] & 0xff);
+                id(temp).publish_state(0.1 * float(tempVal));
+
+              //} else if(dataRegister == 0xb1){ // Mac
+              //  char stringArray[6 * 3]; // 6 Bytes * 3 Chars
+              //  for (int j = 0; j < 6; j++) {
+              //      snprintf(&stringArray[j * 3], 6 * 3, "%02X:", dataArray[j]);
+              //  }
+              //  stringArray[6*3 - 2] = '\0'; // Remove the trailing colon
+              //  //ESP_LOGV("ble_sensor_lambda", "mac address: %s", stringArray);
+              //  id(mac_addr).publish_state(stringArray);
+
+              } else if(dataRegister == 0x99){ // Device name
+                size_t devNameLen = strlen((char*)dataArray);
+                char* stringArray = new char[devNameLen + 1]; 
+
+                memcpy(stringArray, dataArray, devNameLen);
+                stringArray[devNameLen] = '\0'; // Add null-terminator manually
+
+                id(dev_name).publish_state(stringArray);
+                delete[] stringArray; // free allocated memory
+
+              } else if(dataRegister == 0x9a){ // Serial number
+                  size_t serNumLen = strlen((char*)dataArray);
+                  char* stringArray = new char[serNumLen + 1];
+
+                  memcpy(stringArray, dataArray, serNumLen);
+                  stringArray[serNumLen] = '\0'; // Add null-terminator manually
+
+                  id(ser_num).publish_state(stringArray);
+                  delete[] stringArray; // free allocated memory
+              }
+              
+              i += datalen;
+            }
+
+            id(qpData).publish_state(hexString.c_str()); // publish raw data
+            return 0.0f; // Need to return a float
+
+  - platform: template
+    name: "ORP"
+    id: orp
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: "measurement"
+
+  - platform: template
+    name: "ORP Setpoint"
+    id: orp_set
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    state_class: "measurement"
+  
+  - platform: template
+    name: "pH"
+    id: ph
+    unit_of_measurement: "pH"
+    accuracy_decimals: 1
+    state_class: "measurement"
+
+  - platform: template
+    name: "pH Setpoint"
+    id: ph_set
+    unit_of_measurement: "pH"
+    accuracy_decimals: 1
+    state_class: "measurement"
+  
+  - platform: template
+    name: "Temperature"
+    id: temp
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    state_class: "measurement"
+
+text_sensor:
+  - platform: template
+    name: "QP Raw Data"
+    id: qpData
+    
+  - platform: template
+    name: "MAC Address"
+    id: mac_addr
+
+  - platform: template
+    name: "Device Name"
+    id: dev_name
+    
+  - platform: template
+    name: "Serial number"
+    id: ser_num
