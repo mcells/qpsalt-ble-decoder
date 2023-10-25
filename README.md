@@ -14,7 +14,7 @@ The device does not simply publish each datapoint on its own characteristic uuid
 - Characteristic UUID: `ef785c24-22bb-463d-b651-0b7445ba091c`
 ### Packet structure
 These packets use an encoding which looks a little bit like _ASN.1_: \
-Every packet starts with a nullbyte `0x00`, followed by one byte describing the length of the entire packet in bytes. The third Byte seems to be mostly `0x01`, in one case being `0x02`. The fourth byte identifies the data register being transmitted, followed by one byte denoting the length of the following data. Lastly, the data follows. When multiple registers get sent, the order `register, length, data` is simply repeated.
+Every packet starts with a nullbyte `0x00`, followed by one byte describing the length of the entire packet in bytes. The third Byte seems to be mostly `0x01`, in one case being `0x02`. The fourth byte identifies the data register being transmitted, followed by one byte denoting the length of the following data. Lastly, the data follows. When multiple registers get sent, the order `register, length, data` is simply repeated. \
 For example, lets look at the following Packet: `(0x) 00 09 01 0C 01 6D B0 01 36`
 
 | 00 | 09 | 01 | 0C | 01 | 6D | B0 | 01 | 36 |
